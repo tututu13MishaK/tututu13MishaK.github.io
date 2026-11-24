@@ -1,1 +1,601 @@
-fghj
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<title>Forza Horizon 6 v9</title>
+<style>
+  canvas {
+    background: #444;
+    display: block;
+    margin: 0 auto;
+    border: 2px solid #fff;
+  }
+
+  #controls {
+    position: fixed;
+    bottom: 5px;
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    padding: 0 20px;
+    box-sizing: border-box;
+    z-index: 10;
+  }
+
+  button {
+    width: 45%;
+    padding: 15px 0;
+    font-size: 20px;
+    border-radius: 50px;
+    border: none;
+    background-color: #555;
+    color: #fff;
+    cursor: pointer;
+    user-select: none;
+    transition: background-color 0.2s;
+  }
+
+  button:active {
+    background-color: #777;
+  }
+
+  /* Главное меню (overlay) */
+  #mainMenu {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.75);
+    display: none; /* показывать через JS */
+    align-items: center;
+    justify-content: center;
+    z-index: 25;
+  }
+
+  #mainMenu .menuCard {
+    background: rgba(20, 20, 20, 0.95);
+    padding: 28px 40px;
+    border-radius: 14px;
+    text-align: center;
+    color: #fff;
+    max-width: 90%;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.5);
+  }
+
+  #mainMenu h1 {
+    margin: 0 0 12px;
+    font-size: 40px;
+  }
+
+  #mainMenu p {
+    margin: 0 0 8px;
+    color: #ddd;
+  }
+
+  #startBtn, #recordsBtn, #resetBtn {
+    padding: 12px 28px;
+    font-size: 22px;
+    border-radius: 8px;
+    border: none;
+    background: #28a745;
+    color: #fff;
+    cursor: pointer;
+    margin: 6px;
+  }
+
+  #recordsBtn { background: #1e90ff; }
+  #resetBtn { background: #6c757d; }
+
+  /* Поля ввода URL картинок в меню */
+  .urlInput {
+    width: 100%;
+    padding: 10px;
+    border-radius: 6px;
+    border: 1px solid #555;
+    margin: 6px 0;
+    box-sizing: border-box;
+  }
+
+  /* Превью картинок */
+  .previewRow {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    margin: 8px 0 0;
+  }
+  .previewCol {
+    text-align: center;
+  }
+  .previewThumb {
+    width: 180px;
+    height: 110px;
+    object-fit: cover;
+    border-radius: 6px;
+    border: 1px solid #555;
+    display: block;
+    margin: 6px auto 0;
+  }
+
+  /* Рекорды: модальное окно поверх меню/игры */
+  #recordsModal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0,0,0,0.65);
+    z-index: 30;
+  }
+
+  #recordsModal .recordsCard {
+    background: rgba(20, 20, 20, 0.95);
+    padding: 20px;
+    border-radius: 12px;
+    width: min(92%, 640px);
+    color: #fff;
+  }
+
+  #recordsModal h2 { margin: 0 0 8px; }
+
+  #recordsList { margin: 6px 0 0; padding-left: 20px; }
+  #recordsList li { margin: 6px 0; }
+
+  #closeRecordsBtn {
+    float: right;
+    padding: 6px 12px;
+    background: #555;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+
+  /* Сообщение об окончании игры */
+  #gameOverMsg {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(0,0,0,0.8);
+    color: #fff;
+    padding: 20px;
+    font-size: 24px;
+    display: none;
+    z-index: 20;
+    text-align: center;
+  }
+
+  #gameOverMsg button { margin-top: 10px; }
+
+  /* Встроенная кнопка рестарта прямо в сообщение об окончании игры */
+  #playAgainBtn {
+    margin-left: 8px;
+  }
+
+  /* Меню кнопки внутри окна игры (для совместимости) */
+  #menuBtnInline { margin-left: 6px; }
+</style>
+</head>
+<body>
+
+<canvas id="gameCanvas" width="400" height="600"></canvas>
+
+<div id="controls">
+  <button id="leftBtn">Влево</button>
+  <button id="rightBtn">Вправо</button>
+</div>
+
+<div id="gameOverMsg">
+  Игра окончена! Ваши очки: <span id="score"></span><br>
+  <button id="menuBtn">Главное меню</button>
+  <button id="playAgainBtn" style="display:inline-block;" title="Играть ещё раз">Играть ещё раз</button>
+</div>
+
+<!-- Главное меню -->
+<div id="mainMenu" aria-label="Главное меню">
+  <div class="menuCard">
+    <h1>Forza Horizon 6 v9</h1>
+    <p>Управление: стрелки или кнопки на экране. Введите URL картинок и нажмите Играть.</p>
+
+    <input id="carImageUrl" class="urlInput" type="url" placeholder="URL картинки машины (например, https://...)">
+    <input id="obstacleImageUrl" class="urlInput" type="url" placeholder="URL картинки препятствия (например, https://...)">
+
+    <div class="previewRow" aria-label="Превью изображений">
+      <div class="previewCol">
+        <div>Превью машины</div>
+        <img id="carPreview" class="previewThumb" src="" alt="Превью машины">
+      </div>
+      <div class="previewCol">
+        <div>Превью препятствия</div>
+        <img id="obstaclePreview" class="previewThumb" src="" alt="Превью препятствия">
+      </div>
+    </div>
+
+    <div style="margin-top:8px;">
+      <button id="startBtn">Играть</button>
+      <button id="recordsBtn" type="button">Рекорды</button>
+      <button id="resetBtn" type="button" style="margin-left:6px;">Сброс до дефолтов</button>
+    </div>
+  </div>
+</div>
+
+<!-- Рекорды (модал) -->
+<div id="recordsModal" aria-label="Рекорды">
+  <div class="recordsCard">
+    <h2>Рекорды</h2>
+    <ol id="recordsList"></ol>
+    <button id="closeRecordsBtn">Закрыть</button>
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+const gameOverMsg = document.getElementById('gameOverMsg');
+const scoreSpan = document.getElementById('score');
+const menuBtn = document.getElementById('menuBtn');
+const mainMenu = document.getElementById('mainMenu');
+const startBtn = document.getElementById('startBtn');
+const recordsBtn = document.getElementById('recordsBtn');
+const resetBtn = document.getElementById('resetBtn');
+const leftBtn = document.getElementById('leftBtn');
+const rightBtn = document.getElementById('rightBtn');
+const carImageUrlInput = document.getElementById('carImageUrl');
+const obstacleImageUrlInput = document.getElementById('obstacleImageUrl');
+const carPreviewImg = document.getElementById('carPreview');
+const obstaclePreviewImg = document.getElementById('obstaclePreview');
+const recordsModal = document.getElementById('recordsModal');
+const recordsList = document.getElementById('recordsList');
+const closeRecordsBtn = document.getElementById('closeRecordsBtn');
+const playAgainBtn = document.getElementById('playAgainBtn');
+
+// Изображения и константы
+let isRunning = false;
+let gameOver = false;
+let score = 0;
+
+// Машина
+const carWidth = 45;
+const carHeight = 100;
+let carX = (canvas.width - carWidth) / 2;
+const carY = canvas.height - carHeight - 60;
+const carSpeed = 8;
+
+let leftPressed = false;
+let rightPressed = false;
+
+// Объекты на пути
+let obstacles = [];
+const obstacleWidth = 45;
+const obstacleHeight = 100;
+const obstacleSpeed = 5;
+
+// Изображения (дефолтные URL)
+const carImage = new Image();
+const obstacleImage = new Image();
+
+// Флаги готовности изображений
+let carImageReady = false;
+let obstacleImageReady = false;
+let imagesReady = false;
+
+// Дефолтные URL
+const DEFAULT_CAR_URL = 'https://i.pinimg.com/736x/d7/56/4f/d7564fa71cfe6f4e7eaa7021b40c58f8.jpg';
+const DEFAULT_OBSTACLE_URL = 'https://e7.pngegg.com/pngimages/215/554/png-clipart-2017-formula-one-world-championship-malaysian-grand-prix-abu-dhabi-grand-prix-singapore-grand-prix-united-states-grand-prix-others-car-vehicle.png';
+
+// Локальный STORE для лидеров
+const LEADERBOARD_KEY = 'fh6_leaderboard_v7';
+
+let leaderboardUpdated = false;
+
+// Превью и локальное сохранение URL
+const STORAGE_CAR_URL = 'fh6_car_url';
+const STORAGE_OBS_URL = 'fh6_obs_url';
+
+// Загрузка дефолтных изображений
+function loadDefaultImages(){
+  carImageReady = false;
+  obstacleImageReady = false;
+  imagesReady = false;
+
+  carImage.onload = () => { carImageReady = true; checkImagesReady(); };
+  obstacleImage.onload = () => { obstacleImageReady = true; checkImagesReady(); };
+
+  carImage.onerror = () => { carImageReady = false; checkImagesReady(); };
+  obstacleImage.onerror = () => { obstacleImageReady = false; checkImagesReady(); };
+
+  carImage.src = DEFAULT_CAR_URL;
+  obstacleImage.src = DEFAULT_OBSTACLE_URL;
+}
+loadDefaultImages();
+
+function checkImagesReady(){
+  imagesReady = carImageReady && obstacleImageReady;
+}
+
+// Рекорды: загрузка/сохранение
+function loadLeaderboard() {
+  try {
+    const raw = localStorage.getItem(LEADERBOARD_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+function saveLeaderboard(lb) {
+  localStorage.setItem(LEADERBOARD_KEY, JSON.stringify(lb));
+}
+function updateLeaderboard(newScore) {
+  if (typeof newScore !== 'number' || isNaN(newScore)) return;
+  let lb = loadLeaderboard();
+  lb.push({ score: newScore, date: Date.now() });
+  lb.sort((a, b) => b.score - a.score);
+  lb = lb.slice(0, 10);
+  saveLeaderboard(lb);
+}
+function renderLeaderboard() {
+  const lb = loadLeaderboard();
+  recordsList.innerHTML = '';
+  if (lb.length === 0) {
+    const li = document.createElement('li');
+    li.textContent = 'Пока рекордов нет';
+    recordsList.appendChild(li);
+    return;
+  }
+  lb.forEach((r, idx) => {
+    const li = document.createElement('li');
+    const date = new Date(r.date);
+    li.textContent = (idx + 1) + '. ' + r.score + ' очков — ' +
+      date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+    recordsList.appendChild(li);
+  });
+}
+
+// Меню: показать/скрыть
+function showMenu(){ 
+  isRunning = false; 
+  gameOver = false; 
+  mainMenu.style.display = 'flex'; 
+  gameOverMsg.style.display='none'; 
+  renderLeaderboard();
+}
+function hideMenu(){ mainMenu.style.display = 'none'; }
+
+// Открыть окно рекордов
+function openRecords() {
+  renderLeaderboard();
+  recordsModal.style.display = 'flex';
+}
+function closeRecords() {
+  recordsModal.style.display = 'none';
+}
+
+// Обновление превью по вводу URL
+carImageUrlInput.addEventListener('input', () => {
+  const v = carImageUrlInput.value.trim();
+  carPreviewImg.src = v ? v : DEFAULT_CAR_URL;
+});
+obstacleImageUrlInput.addEventListener('input', () => {
+  const v = obstacleImageUrlInput.value.trim();
+  obstaclePreviewImg.src = v ? v : DEFAULT_OBSTACLE_URL;
+});
+
+// Сохранение URLs в localStorage и старт игры
+startBtn.addEventListener('click', () => {
+  // Сохранение URL в localStorage, если введены
+  const carURL = carImageUrlInput.value.trim();
+  const obsURL = obstacleImageUrlInput.value.trim();
+
+  if (carURL.length > 0) localStorage.setItem(STORAGE_CAR_URL, carURL);
+  if (obsURL.length > 0) localStorage.setItem(STORAGE_OBS_URL, obsURL);
+
+  // Загружаем новые изображения, если URL введены
+  let newCarURLProvided = carURL.length > 0;
+  let newObsURLProvided = obsURL.length > 0;
+
+  if (newCarURLProvided) {
+    carImageReady = false;
+    carImage.onload = () => { carImageReady = true; checkImagesReady(); };
+    carImage.onerror = () => { carImageReady = false; checkImagesReady(); };
+    carImage.src = carURL;
+  }
+
+  if (newObsURLProvided) {
+    obstacleImageReady = false;
+    obstacleImage.onload = () => { obstacleImageReady = true; checkImagesReady(); };
+    obstacleImage.onerror = () => { obstacleImageReady = false; checkImagesReady(); };
+    obstacleImage.src = obsURL;
+  }
+
+  // Сброс состояния игры и запуcк цикла
+  hideMenu();
+  isRunning = true;
+  leaderboardUpdated = false;
+  requestAnimationFrame(gameLoop);
+});
+
+// Кнопка "Рекорды" в меню
+recordsBtn.addEventListener('click', openRecords);
+
+// Резервная защита на случай, если кнопка потеряется из-за динамики DOM
+const menuBtnOriginal = document.getElementById('menuBtn');
+if (menuBtnOriginal) {
+  menuBtnOriginal.addEventListener('click', showMenu);
+}
+// Делегация кликов — надёжно вызывает showMenu даже если кнопка перерисовывается
+document.addEventListener('click', function(e) {
+  if (e.target && e.target.id === 'menuBtn') {
+    showMenu();
+  }
+});
+
+// Закрытие рекордов
+closeRecordsBtn.addEventListener('click', closeRecords);
+
+// Кнопка Rest
+resetBtn.addEventListener('click', () => {
+  localStorage.removeItem(STORAGE_CAR_URL);
+  localStorage.removeItem(STORAGE_OBS_URL);
+  carImageUrlInput.value = '';
+  obstacleImageUrlInput.value = '';
+  carPreviewImg.src = DEFAULT_CAR_URL;
+  obstaclePreviewImg.src = DEFAULT_OBSTACLE_URL;
+  carImage.src = DEFAULT_CAR_URL;
+  obstacleImage.src = DEFAULT_OBSTACLE_URL;
+  // Очистить лидеры, если нужно полностью сбросить
+  // localStorage.removeItem(LEADERBOARD_KEY);
+  renderLeaderboard();
+});
+
+// Кнопки рестарта в игре
+function restartGame() {
+  obstacles = [];
+  score = 0;
+  carX = (canvas.width - carWidth) / 2;
+  gameOver = false;
+  // Сразу скрываем экран окончания, если он был виден
+  gameOverMsg.style.display = 'none';
+  isRunning = true;
+  requestAnimationFrame(gameLoop);
+}
+playAgainBtn.addEventListener('click', restartGame);
+
+// Небольшие элементы превью по умолчанию
+const carImageUrlPreview = document.createElement('span');
+const obstacleImageUrlPreview = document.createElement('span');
+carPreviewImg.src = DEFAULT_CAR_URL;
+obstaclePreviewImg.src = DEFAULT_OBSTACLE_URL;
+
+// Обработчики клавиш
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowLeft') leftPressed = true;
+  if (e.key === 'ArrowRight') rightPressed = true;
+  // Быстрый старт из меню Enter
+  if (e.key === 'Enter' && getComputedStyle(mainMenu).display !== 'none') {
+    startBtn.click();
+  }
+});
+document.addEventListener('keyup', (e) => {
+  if (e.key === 'ArrowLeft') leftPressed = false;
+  if (e.key === 'ArrowRight') rightPressed = false;
+});
+
+// Обработчики для кнопок на тачскрине
+function addTouchListener(elem, direction){
+  elem.addEventListener('touchstart', (e) => { e.preventDefault(); if(direction==='left') leftPressed=true; else rightPressed=true; }, {passive:false});
+  elem.addEventListener('touchend', (e) => { e.preventDefault(); if(direction==='left') leftPressed=false; else rightPressed=false; }, {passive:false});
+  elem.addEventListener('mousedown', () => { if(direction==='left') leftPressed=true; else rightPressed=true; });
+  elem.addEventListener('mouseup', () => { if(direction==='left') leftPressed=false; else rightPressed=false; });
+  elem.addEventListener('touchcancel', (e) => { e.preventDefault(); if(direction==='left') leftPressed=false; else rightPressed=false; }, {passive:false});
+}
+addTouchListener(leftBtn, 'left');
+addTouchListener(rightBtn, 'right');
+
+// Основной цикл
+function createObstacle() {
+  const lanesCount = 5;
+  const laneWidth = canvas.width / lanesCount;
+  const laneIndex = Math.floor(Math.random() * lanesCount);
+  const x = laneIndex * laneWidth + (laneWidth - obstacleWidth) / 2;
+  obstacles.push({ x: x, y: -obstacleHeight });
+}
+function checkCollision() {
+  for (let obstacle of obstacles) {
+    if (
+      obstacle.x < carX + carWidth &&
+      obstacle.x + obstacleWidth > carX &&
+      obstacle.y < carY + carHeight &&
+      obstacle.y + obstacleHeight > carY
+    ) {
+      gameOver = true;
+      break;
+    }
+  }
+}
+
+// Основной цикл
+function gameLoop() {
+  // Если меню открыто или игра не запущена
+  if (!isRunning) {
+    requestAnimationFrame(gameLoop);
+    return;
+  }
+
+  // Если проиграли — показываем окно и записываем рекорды
+  if (gameOver) {
+    const finalScore = Math.floor(score / 60);
+    if (!leaderboardUpdated) {
+      updateLeaderboard(finalScore);
+      leaderboardUpdated = true;
+    }
+    scoreSpan.textContent = finalScore;
+    gameOverMsg.style.display = 'block';
+    // Не продолжаем цикл
+    return;
+  }
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // Передвижение машины
+  if (leftPressed && carX > 0) carX -= carSpeed;
+  if (rightPressed && carX < canvas.width - carWidth) carX += carSpeed;
+
+  // Дорога
+  ctx.fillStyle = '#555';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Разметка дороги
+  ctx.strokeStyle = 'white';
+  ctx.lineWidth = 2;
+  ctx.setLineDash([20, 15]);
+  ctx.strokeRect(canvas.width / 4, 0, canvas.width / 2, canvas.height);
+  ctx.setLineDash([]);
+
+  // Машина (используем изображение, если готовы)
+  if (imagesReady) {
+    ctx.drawImage(carImage, carX, carY, carWidth, carHeight);
+  } else {
+    ctx.fillStyle = '#2e88ff';
+    ctx.fillRect(carX, carY, carWidth, carHeight);
+    ctx.fillStyle = '#000';
+    ctx.fillRect(carX + 8, carY + carHeight - 20, 12, 12);
+    ctx.fillRect(carX + carWidth - 20, carY + carHeight - 20, 12, 12);
+  }
+
+  // Препятствия
+  if (Math.random() < 0.02) createObstacle();
+  for (let obstacle of obstacles) {
+    obstacle.y += obstacleSpeed;
+    if (imagesReady) {
+      ctx.drawImage(obstacleImage, obstacle.x, obstacle.y, obstacleWidth, obstacleHeight);
+    } else {
+      ctx.fillStyle = '#c0392b';
+      ctx.fillRect(obstacle.x, obstacle.y, obstacleWidth, obstacleHeight);
+    }
+  }
+
+  // Удаляем препятствия за границей
+  obstacles = obstacles.filter(ob => ob.y < canvas.height + obstacleHeight);
+
+  // Проверка столкновений
+  checkCollision();
+
+  // Очки
+  score += 1;
+  ctx.fillStyle = 'white';
+  ctx.font = '20px Arial';
+  ctx.fillText('Очки: ' + Math.floor(score / 60), 10, 30);
+
+  requestAnimationFrame(gameLoop);
+}
+
+// Запуск меню по умолчанию
+showMenu();
+</script>
+</body>
+</html>
